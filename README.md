@@ -1,320 +1,323 @@
-# Gabigol — Polymarket Crypto Up/Down Bot
+# STACK-X0 — Polymarket Crypto Up/Down Bot
 
-Automated trading engine for Polymarket **crypto Up/Down** markets (BTC, ETH, SOL, XRP — 5m and 15m windows), implementing a **gabigol-style** strategy: high-frequency, buy-only, hold-to-redeem farming across thousands of micro-positions.
+Automated trading engine for Polymarket **crypto Up/Down** markets (BTC, ETH, SOL, XRP — **5m** and **15m** windows). Strategy core:
 
-(https://polymarket.com/@gabigol) (`0x885278f0e304bc2d53f805af2ab779cb6011c569).
+> **One side. One entry band. Hold to redeem. Never sell. Never hedge.**
 
-> **Disclaimer:** This describes observed public trading patterns and an independent reimplementation. It is **not financial advice**. Past results (e.g. ~$308K cumulative PnL on third-party trackers) do not guarantee future performance. Start with simulation and micro-size live clips.
+For every active slot the bot:
+
+1. Reads **direction** from CEX lead vs slot open (`spot − open` gap)
+2. Identifies the **favorite** side (book prices it ~**52–57¢**)
+3. If favorite ask ∈ **[50¢, 70¢]** and conviction is OK → **taker BUY ~$15–$60** (~50–100 shares)
+4. **Holds to resolution** → redeem **$1** if correct, **$0** if wrong
+5. **Never sells**, **never buys the opposite side**
+
+Built on [polymarket-trade-engine](https://github.com/KaustubhPatange/polymarket-trade-engine). Inspired by reverse-engineered behavior of [@gabigol](https://polymarket.com/@gabigol) (`0x885278f0e304bc2d53f805af2ab779cb6011c569`).
+
+> **Disclaimer:** Observed public patterns + an independent reimplementation. **Not financial advice.** Past results do not guarantee future performance. Start with simulation and micro-size live clips.
 
 ---
 
 ## Table of contents
 
-1. [The core idea — why this can be profitable](#the-core-idea--why-this-can-be-profitable)
-2. [How money is made — the three legs](#how-money-is-made--the-three-legs)
-3. [The math — convergence, lottery, and compounding](#the-math--convergence-lottery-and-compounding)
-4. [Why win rate can be 60% and you still win](#why-win-rate-can-be-60-and-you-still-win)
-5. [What kills the edge](#what-kills-the-edge)
-6. [Visual walkthrough (screenshots)](#visual-walkthrough-screenshots)
-7. [How this bot implements the strategy](#how-this-bot-implements-the-strategy)
-8. [Quick start](#quick-start)
-9. [Configuration reference](#configuration-reference)
-10. [Simulation and validation](#simulation-and-validation)
-11. [Production deployment](#production-deployment)
-12. [Architecture](#architecture)
-13. [Further reading](#further-reading)
+1. [Strategy in one page](#strategy-in-one-page)
+2. [Why this can be profitable](#why-this-can-be-profitable)
+3. [The math — edge, fees, break-even](#the-math--edge-fees-break-even)
+4. [Conviction and the entry band](#conviction-and-the-entry-band)
+5. [What we do not do](#what-we-do-not-do)
+6. [What kills the edge](#what-kills-the-edge)
+7. [Visual walkthrough (screenshots)](#visual-walkthrough-screenshots)
+8. [How the bot implements it](#how-the-bot-implements-it)
+9. [Quick start](#quick-start)
+10. [Configuration](#configuration)
+11. [Simulation and validation](#simulation-and-validation)
+12. [Production](#production)
+13. [Architecture](#architecture)
+14. [Further reading](#further-reading)
 
 ---
 
-## The core idea — why this can be profitable
+## Strategy in one page
 
-Most Polymarket bots try to **predict** one outcome per slot and size up when a model says edge exists. The gabigol archetype is different:
+```
+For each active crypto up/down slot (BTC / ETH / SOL / XRP, 5m or 15m):
 
-**The edge is not one clever bet per market — it is statistical volume across tens of thousands of markets.**
-
-Every 5-minute (or 15-minute) crypto slot is a binary market:
-
-- Will BTC finish **above** the opening reference price (**UP** resolves to $1)?
-- Or **below** it (**DOWN** resolves to $1)?
-
-Shares trade between $0.00 and $1.00. At resolution, winning shares pay **$1.00**; losing shares pay **$0.00**.
-
-The strategy runs **three concurrent scanners** on every active slot and almost **never sells**. Profit comes from **redemption at resolution**, not from exiting into the book. Over ~1.9M lifetime buys (observed on gabigol), that means:
-
-| Behavior | Observed pattern |
-|----------|------------------|
-| Buy:Sell ratio | ~3,499 : 1 |
-| Median clip | ~$1.92 |
-| Markets traded | ~100K+ |
-| Per-market win rate | ~60% |
-| Profit factor | ~2.4× |
-| Cumulative PnL (Struct, Jul 2026) | ~$308K on ~$20.6M volume |
-
-A **60% market win rate** sounds mediocre until you see the payoff shape: thousands of small convergence clips (+1–6% each) plus occasional lottery jackpots (10×–30× on cheap tickets) compound faster than the full-premium losses on wrong-side lottery legs.
+  1. Read direction from CEX lead vs slot open (spot vs open gap)
+  2. Identify the FAVORITE side (book prices it 52–57¢)
+  3. If favorite ask ∈ [0.50, 0.70] and conviction OK:
+       → TAKER BUY ~$15–$60 (~50–100 shares)
+  4. Hold to resolution → redeem $1 if correct, $0 if wrong
+  5. Never sell, never hedge opposite side
+```
 
 ```mermaid
-flowchart LR
-  subgraph inputs [Every 5m slot]
-    Slot[New BTC Up/Down window]
-  end
-  subgraph legs [Three buy-only legs]
-    Conv[Convergence 94-99c]
-    Lot[Lottery 3-30c]
-    Mid[Mid 30-94c]
-  end
-  subgraph output [PnL source]
-    Redeem[Hold to resolution]
-    Dollar[Winning shares -> $1.00]
-  end
-  Slot --> Conv
-  Slot --> Lot
-  Slot --> Mid
-  Conv --> Redeem
-  Lot --> Redeem
-  Mid --> Redeem
-  Redeem --> Dollar
+flowchart TB
+  slot[Active 5m or 15m slot]
+  cex[CEX spot vs slot open]
+  fav[Favorite side ask 52-57c]
+  band{Ask in 50-70c and conviction OK?}
+  buy[Taker BUY 15-60 USD]
+  hold[Hold — no sell no hedge]
+  redeem[Redeem at resolution]
+  slot --> cex --> fav --> band
+  band -->|yes| buy --> hold --> redeem
+  band -->|no| wait[Skip or wait next tick]
 ```
+
+| Step | Input | Decision |
+|------|--------|----------|
+| Direction | Binance/Coinbase (etc.) spot vs Polymarket **price to beat** | `gap > 0` → lean **UP**; `gap < 0` → lean **DOWN** |
+| Favorite | Book mid / best ask on that side ~**52–57¢** | Confirms the market agrees with direction (mild favorite, not a done deal) |
+| Entry | Best ask ∈ **[0.50, 0.70]** + conviction OK | Size **~$15–$60** (~**50–100** shares) as **FOK/taker** |
+| Exit | Slot resolves | Redeem winners at **$1**; losers expire worthless |
 
 **Screenshot placeholder — market context**
 
 <!-- Add: docs/screenshots/01-polymarket-updown-market.png -->
 ![Polymarket 5m Up/Down market](docs/screenshots/01-polymarket-updown-market.png)
 
-*A live crypto Up/Down slot: countdown, price to beat, UP/DOWN ask prices. Each row is one independent “coin flip with a clock.”*
+*Live crypto Up/Down slot: countdown, price to beat, UP/DOWN prices. One independent binary per window.*
 
 ---
 
-## How money is made — the three legs
+## Why this can be profitable
 
-### Leg A — Convergence (~48% of buys) — the payroll engine
+This is **not** endgame noise farming (sweeping 94–99¢) and **not** lottery spray (buying 3–30¢ losers). It is a **mid-band favorite trade**:
 
-**When:** Last ~60–180 seconds of a slot (default: 120s).
+- You buy when the book and CEX already agree on a **mild favorite**.
+- You pay roughly **50–70¢** per share for a claim that pays **$1** if you are right.
+- Gross payoff on a winning entry at **55¢** is about **+82%** on capital deployed (before fees).
+- Gross payoff on a losing entry is **−100%** of that clip.
 
-**What:** The outcome is nearly decided — spot price vs “price to beat” strongly favors UP or DOWN. The **winning side** still has asks in the **94–99.5¢** range before the book fully closes.
+Profitability comes from **asymmetric dollars per win vs loss at moderate prices**, combined with **repeated slots** across assets:
 
-**Action:** Burst **FOK** (fill-or-kill) buys in **~$2 clips** on the likely winner. Hold until resolution. Each winning share redeems at **$1.00**.
+| Outcome | Example buy @$55 / 80 shares | Cash flow |
+|---------|------------------------------|-----------|
+| Correct | Cost **$44**; redeem **$80** | **+$36** (~+82% gross) |
+| Wrong | Cost **$44**; redeem **$0** | **−$44** |
 
-**Profit per winning ticket:** roughly **+1% to +6%** gross per share (e.g. buy at 98¢ → receive $1.00 = 2¢ / 98¢ ≈ 2% before fees).
-
-This leg fires **most often** and **most reliably**. It is thin margin per trade, but gabigol runs it **thousands of times per day** across BTC, ETH, SOL, XRP 5m books simultaneously. That is the “noise farming” core.
-
-**Screenshot placeholder — convergence book**
-
-<!-- Add: docs/screenshots/02-orderbook-convergence.png -->
-![Convergence order book](docs/screenshots/02-orderbook-convergence.png)
-
-*Late-slot book: winner side clustered at 94–99¢. The bot sweeps these asks in rapid FOK bursts.*
-
----
-
-### Leg B — Lottery (~21% of buys) — the tail-risk engine
-
-**When:** Mid-slot, while uncertainty is still meaningful (default: 60–280 seconds remaining).
-
-**What:** The **likely losing** side still trades at **3–30¢**. These are cheap “lottery tickets.”
-
-**Action:** Small **~$0.50–$3** FOK clips on the underdog.
-
-| Outcome | PnL on clip |
-|---------|-------------|
-| Underdog wins (upset) | **+300% to +3000%** (e.g. 10¢ → $1.00 = 10×) |
-| Underdog loses | **−100%** of premium (lose the $1.50 clip) |
-
-Losses are **capped** (you only lose the premium). Wins are **uncapped** in ratio terms. You do not need a high hit rate on lottery legs — a few upsets per week across thousands of clips can materially lift session PnL.
-
-**Screenshot placeholder — lottery book**
-
-<!-- Add: docs/screenshots/03-orderbook-lottery.png -->
-![Lottery order book](docs/screenshots/03-orderbook-lottery.png)
-
-*Mid-slot: loser side at 3–30¢. Small repeated clips; occasional huge payoff.*
-
----
-
-### Leg C — Mid conviction (~31% of buys) — the filler
-
-**When:** Rest of the slot, when convergence is not actively bursting.
-
-**What:** Winner-side asks in the **30–94¢** band — directional conviction without endgame certainty.
-
-**Action:** ~$1–$2 FOK clips on the likely winner. Lower edge per trade than convergence, but fills the gap between lottery spray and endgame sweeps.
-
----
-
-### Both sides on the same market — by design
-
-In observed data, **~42%** of conditions (61/144 in a 3,500-trade API sample) had **buys on both UP and DOWN** in the same slot. That is **not** classic arb (UP + DOWN < $1). It is:
-
-- Lottery clips on the cheap loser **plus**
-- Convergence clips on the expensive winner later in the slot, or
-- Scaling into the wrong cheap side before a late flip.
-
-Net PnL per slot can be: **small convergence win + total lottery loss**, or **lottery jackpot + convergence win**. The portfolio edge is across **volume**, not per-slot perfection.
-
-**Screenshot placeholder — dual exposure**
-
-<!-- Add: docs/screenshots/07-both-sides-same-slot.png -->
-![Both sides same slot](docs/screenshots/07-both-sides-same-slot.png)
-
-*Example: ETH Up 96.5¢ position and ETH Down 10.8¢ position in the same 5m window.*
-
----
-
-## The math — convergence, lottery, and compounding
-
-### Convergence — fee-aware edge
-
-Polymarket charges **taker fees** on FOK orders. For crypto 5m/15m markets, fee rate ≈ **0.072**. Fee in shares:
-
-```
-fee = shares × 0.072 × price × (1 − price)
-```
-
-**Net edge per share** if the side wins and redeems at $1.00:
-
-```
-netEdge = 1 − price − (0.072 × price × (1 − price))
-```
-
-Implemented in [`engine/strategy/lib/fees.ts`](engine/strategy/lib/fees.ts) as `netEdgePerShare()`. The bot **skips** convergence buys when `netEdge < GABIGOL_MIN_EDGE` (default **0.5%**).
-
-| Ask price | Gross edge (1 − price) | Approx. net edge after taker fee |
-|-----------|------------------------|----------------------------------|
-| 94¢ | 6.0% | ~5.6% |
-| 96¢ | 4.0% | ~3.7% |
-| 98¢ | 2.0% | ~1.6% |
-| 99¢ | 1.0% | ~0.7% |
-
-At **99¢**, fees eat most of the gross clip. Observed gabigol PnL includes **~$20.5K in maker/taker rebates** — at scale, rebates can turn fee-thin 99¢ farming from breakeven into positive expectancy. Smaller independent deployments may not get the same rebate tier.
-
-**Example — one convergence clip**
-
-- Buy **5 shares** UP @ **96¢** FOK → cost ≈ **$4.80**
-- Side wins → redeem **5 × $1.00 = $5.00**
-- Gross profit ≈ **$0.20** (~4.2% on cost)
-- Repeat **500× per day** across 4 assets → small edges aggregate
-
-### Lottery — asymmetric payoff
-
-- Spend **$1.50** on DOWN @ **15¢** (~10 shares after fees)
-- If DOWN loses: **−$1.50**
-- If DOWN wins: **~$10.00** redemption → **+$8.50** (~5.7×)
-
-Break-even hit rate for equal clip sizes: only **~15%** upset rate needed on lottery legs where average win is 6× premium. Observed upset rate is lower, but convergence profits subsidize lottery spray.
-
-### Session-level compounding (observed gabigol stats)
-
-| Metric | Value | Implication |
-|--------|-------|-------------|
-| Avg win (per market) | **+$33.6** | Convergence bursts + occasional lottery hits |
-| Avg loss (per market) | **−$21** | Capped lottery premiums + wrong-side convergence |
-| Profit factor | **2.4×** | Gross wins / gross losses |
-| Max drawdown | **−$6K (−2.6%)** | Many small losses; rare large convergence mistakes |
-| 30d PnL | **~$49K** | Requires capital, speed, and continuous uptime |
+Because wins pay **more dollars than losses lose on the same size** only if win rate stays high enough after fees — otherwise the strategy loses. Mid-band favorites aim for that: the CEX gap + book confirmation filters coin-flips; you skip both razor-thin 99¢ clips and cheap underdog lottery tickets.
 
 ```mermaid
-xychart-beta
-    title "Payoff shape per leg (conceptual)"
-    x-axis ["Lottery loss", "Mid win", "Convergence win", "Lottery jackpot"]
-    y-axis "PnL multiple on clip" -1 --> 30
-    bar [-1, 0.5, 0.04, 15]
+flowchart LR
+  subgraph edge [Where edge comes from]
+    A[CEX leads Polymarket]
+    B[Book still mid-priced 50-70c]
+    C[Favorite not fully priced in]
+  end
+  subgraph pnl [PnL]
+    W[Win: redeem near 2x at 50c]
+    L[Lose: lose full premium]
+  end
+  A --> C
+  B --> C
+  C --> W
+  C --> L
 ```
+
+**Core claim (expectancy):**
+
+If, after fees, your long-run win rate on these mid-band favorites exceeds the break-even rate for your average entry price, the strategy has positive expectancy. Volume (many BTC/ETH/SOL/XRP slots) then compounds that edge.
+
+**Screenshot placeholder — favorite mid-band book**
+
+<!-- Add: docs/screenshots/02-orderbook-favorite-midband.png -->
+![Favorite mid-band order book](docs/screenshots/02-orderbook-favorite-midband.png)
+
+*Favorite side trading ~52–57¢, ask still inside 50–70¢ — this is the intended entry zone.*
 
 ---
 
-## Why win rate can be 60% and you still win
+## The math — edge, fees, break-even
 
-Traditional betting intuition: “You need >50% win rate.” Here, **win rate is measured per market (slot)**, not per individual buy.
+### Gross vs net after taker fees
 
-- A single slot may have **50+ buys** (convergence burst + lottery + mid).
-- **Per-market win rate ~60%** means 40% of slots net negative — often because lottery legs expired worthless or convergence bought the wrong side after a late flip.
-- **Profit factor 2.4×** means winning slots earn **2.4× more dollars** than losing slots lose.
+FOK buys are **takers**. Crypto 5m/15m fee rate ≈ **0.072**:
 
-The strategy is profitable because:
+```
+feeShares = shares × 0.072 × price × (1 − price)
+netEdgePerShare = 1 − price − (0.072 × price × (1 − price))
+```
 
-1. **Convergence** contributes frequent small positive expectancy clips.
-2. **Lottery** contributes positive skew (many −100% premia, rare +1000% hits).
-3. **Volume** — law of large numbers across ~100K markets smooths variance.
-4. **No sell friction** — no spread paid to exit; winners ride to $1.00.
-5. **Rebates** (at scale) — fee program can offset taker cost on 99¢ sweeps.
+| Favorite ask | Gross if win `(1−p)/p` | Approx. net edge / share if win | Break-even win rate\* |
+|--------------|------------------------|----------------------------------|------------------------|
+| **50¢** | **+100%** | ~+48¢ | ~52% |
+| **55¢** | **+82%** | ~+43¢ | ~55–56% |
+| **60¢** | **+67%** | ~+38¢ | ~58–59% |
+| **65¢** | **+54%** | ~+33¢ | ~61–62% |
+| **70¢** | **+43%** | ~+28¢ | ~64–65% |
 
-**Screenshot placeholder — track record**
+\*Rough (premium risk / (premium + net win)); actual break-even rises slightly after fee share haircuts on fills. Use sim logs to calibrate your live filled prices.
+
+**Read this carefully:** at **70¢** you need a **much higher** hit rate than at **50¢**. That is why the band is capped at **0.70** — above that, edges shrink and break-even win rates climb into “almost resolved” territory where you are paying too much for residual upside.
+
+### Worked example — one slot, one clip
+
+```
+CEX: BTC spot $98,420   Slot open (price to beat): $98,380
+Gap: +$40 → lean UP
+
+Book: UP best ask 0.54   DOWN best ask 0.47
+Favorite: UP (~54¢ in the 52–57¢ “mild favorite” zone)
+Ask in [0.50, 0.70]: yes
+Conviction: gap + book agreement OK
+
+→ TAKER BUY 80 shares UP @ 0.54  (~$43.20 notional)
+
+If UP wins:  redeem ~$80  − fees  → ~+$35 profit
+If UP loses: redeem $0            → ~−$43 loss
+Never BUY DOWN. Never SELL UP.
+```
+
+### Why size is $15–$60 (not $2 micro-clips)
+
+This strategy sizes **enough to make mid-band edge matter**, but **small enough that one wrong slot does not sink the wallet**:
+
+| Size | Shares @ 55¢ | Win PnL (gross) | Loss PnL |
+|------|--------------|-----------------|----------|
+| $15 | ~27 | ~+$12 | −$15 |
+| $30 | ~55 | ~+$25 | −$30 |
+| $60 | ~109 | ~+$49 | −$60 |
+
+~**50–100 shares** at mid-band prices lands in this notional range by design.
+
+**Screenshot placeholder — PnL / profile**
 
 <!-- Add: docs/screenshots/04-gabigol-profile-struct.png -->
-![Gabigol profile and Struct stats](docs/screenshots/04-gabigol-profile-struct.png)
+![Profile / analytics](docs/screenshots/04-gabigol-profile-struct.png)
 
-*Third-party analytics: cumulative PnL, volume, win rate, profit factor.*
+*Track cumulative PnL, volume, and win rate — mid-band hit rate is the KPI that matters most.*
+
+---
+
+## Conviction and the entry band
+
+### Direction (CEX lead)
+
+```
+gap = spot − openPrice
+gap > 0  → candidate UP
+gap < 0  → candidate DOWN
+```
+
+Optional filter: require `|gap| ≥ GABIGOL_MIN_GAP_USD` so flat open ≈ coin-flip slots are skipped.
+
+### Favorite identification (52–57¢)
+
+The **favorite** is the side the book already leans toward — typically mid ~**52–57¢** (not 90¢ endgame, not 20¢ lottery). That band means:
+
+- The market is **not** undecided coin-flip at 50/50 forever.
+- The move is **not** fully baked into a 90¢+ ask yet (still room to `$1`).
+
+### Entry gate [50¢, 70¢]
+
+| Price too low (&lt; 50¢) | Why skip |
+|-------------------------|----------|
+| Book disagrees or stale | May be underdog / trap, not confirmed favorite |
+
+| Price too high (&gt; 70¢) | Why skip |
+|-------------------------|----------|
+| Thin upside vs capital | Break-even win rate gets harsh; resembles buying near-resolution |
+
+### One entry philosophy
+
+- **One favorite side per slot** once conviction fires.
+- **No averaging into the opposite side.**
+- **No hedge.** If you are wrong, you eat the premium — that is the cost of the edge model.
+
+**Screenshot placeholder — CEX vs open**
+
+<!-- Add: docs/screenshots/03-cex-gap-and-asks.png -->
+![CEX gap and asks](docs/screenshots/03-cex-gap-and-asks.png)
+
+*Spot vs price-to-beat with UP/DOWN asks — direction + favorite band visible in one frame.*
+
+---
+
+## What we do not do
+
+| Anti-pattern | Reason |
+|--------------|--------|
+| Sell into the book | Spread + short-term noise; strategy is hold-to-redeem |
+| Buy opposite side (hedge / lottery) | Cancels or muddies favorite expectancy |
+| Sweep 94–99¢ endgame for 1–2% clips | Different bot; fee/rebate game |
+| Spray 3–30¢ underdogs | Lottery book; not this edge |
+| Merge/split arb | Not part of this strategy |
+
+```
+❌ SELL ...
+❌ BUY underdog "just in case"
+❌ BUY both UP and DOWN in the same slot
+✅ BUY favorite once in [50¢, 70¢], hold, redeem
+```
 
 ---
 
 ## What kills the edge
 
-| Risk | Mechanism | Mitigation in this bot |
-|------|-----------|------------------------|
-| **Fee erosion** | 99¢ → $1 is ~1% gross; taker fee can take most of it | `GABIGOL_MIN_EDGE`; skip thin convergence |
-| **Wrong-side 99¢** | Late slot flip → buy loser at 98¢ → ~total loss | Optional `GABIGOL_MIN_GAP_USD`; tune convergence window |
-| **Both-side bleed** | Lottery + convergence in same slot; one leg dies | Separate `GABIGOL_LOTTERY_CAP` / `GABIGOL_MID_CAP` |
-| **Capital lock** | Thousands of open positions need float | `GABIGOL_MARKET_CAP`; wallet buffer ≥ $5K (gabigol runs $100K+) |
-| **Competition** | More bots farm same 5m books → asks vanish faster | Speed, multi-asset fleet, rebate tier |
-| **Regime change** | Polymarket fee/rebate rules or liquidity shift | Monitor; simulate before scaling |
+| Risk | What happens | Mitigation |
+|------|--------------|------------|
+| **Stale CEX / book lag** | You buy a “favorite” as the gap flips | Tick quickly; require live ticker; optional min gap |
+| **Late flip after entry** | Mid-band entry becomes full loss | Size caps; session loss limit |
+| **Entry too rich (near 70¢)** | Need unrealistically high hit rate | Hard cap ask ≤ 0.70; prefer 52–57¢ zone |
+| **Fees + bad fill price** | Expectancy vanishes | Fee-aware checks; FOK at known ask |
+| **Overtrading undecided books** | 50/50 markets at 50¢ bleed after fees | Require favorite band + CEX agreement |
+| **Undersized capital / oversize clips** | Variance blows up | Stay in $15–$60; `MAX_SESSION_LOSS` |
 
 ---
 
 ## Visual walkthrough (screenshots)
 
-Add images under [`docs/screenshots/`](docs/screenshots/). The README references them below — drop your files in place and they will render automatically.
+Drop files under [`docs/screenshots/`](docs/screenshots/). Suggested set for **this** strategy:
 
-| # | File | Purpose |
+| # | File | Capture |
 |---|------|---------|
-| 1 | [`01-polymarket-updown-market.png`](docs/screenshots/01-polymarket-updown-market.png) | Market UI — slot, price to beat, UP/DOWN |
-| 2 | [`02-orderbook-convergence.png`](docs/screenshots/02-orderbook-convergence.png) | Late-slot winner asks 94–99¢ |
-| 3 | [`03-orderbook-lottery.png`](docs/screenshots/03-orderbook-lottery.png) | Mid-slot loser asks 3–30¢ |
-| 4 | [`04-gabigol-profile-struct.png`](docs/screenshots/04-gabigol-profile-struct.png) | PnL / volume / win rate dashboard |
-| 5 | [`05-simulation-chart.png`](docs/screenshots/05-simulation-chart.png) | Engine chart tool output |
-| 6 | [`06-console-burst.png`](docs/screenshots/06-console-burst.png) | Terminal: burst fills, zero sells |
-| 7 | [`07-both-sides-same-slot.png`](docs/screenshots/07-both-sides-same-slot.png) | Dual UP+DOWN exposure one slot |
+| 1 | [`01-polymarket-updown-market.png`](docs/screenshots/01-polymarket-updown-market.png) | Slot UI — countdown, price to beat, UP/DOWN |
+| 2 | [`02-orderbook-favorite-midband.png`](docs/screenshots/02-orderbook-favorite-midband.png) | Favorite ask ~52–57¢ inside 50–70¢ |
+| 3 | [`03-cex-gap-and-asks.png`](docs/screenshots/03-cex-gap-and-asks.png) | Spot vs open + asks |
+| 4 | [`04-gabigol-profile-struct.png`](docs/screenshots/04-gabigol-profile-struct.png) | PnL / win-rate dashboard |
+| 5 | [`05-simulation-chart.png`](docs/screenshots/05-simulation-chart.png) | `scripts/chart.ts` for one round |
+| 6 | [`06-console-favorite-buy.png`](docs/screenshots/06-console-favorite-buy.png) | Single-side FOK buy, **no sells**, **no opposite** |
 
-**Screenshot placeholder — simulation chart**
+**Screenshot placeholder — chart**
 
 <!-- Add: docs/screenshots/05-simulation-chart.png -->
 ![Simulation chart](docs/screenshots/05-simulation-chart.png)
 
-*Interactive chart from a market log: order book, ticker, fills over time.*
+**Screenshot placeholder — console**
 
-**Screenshot placeholder — live console**
+<!-- Add: docs/screenshots/06-console-favorite-buy.png -->
+![Console favorite buy](docs/screenshots/06-console-favorite-buy.png)
 
-<!-- Add: docs/screenshots/06-console-burst.png -->
-![Console burst output](docs/screenshots/06-console-burst.png)
-
-*`gabigol convergence` / `gabigol lottery` / `gabigol mid` lines — no SELL events.*
+*One favorite-side taker buy per slot — no SELL, no opposite BUY.*
 
 ---
 
-## How this bot implements the strategy
+## How the bot implements it
 
-| Spec behavior | Implementation |
-|---------------|----------------|
-| Buy-only, hold-to-redeem | `ctx.blockSells()` in [`engine/strategy/gabigol.ts`](engine/strategy/gabigol.ts) |
-| Convergence 94–99.5¢ | `PRICE_BANDS.convergence` + last `GABIGOL_CONVERGENCE_MAX_SECS` |
-| Lottery 3–30¢ | `PRICE_BANDS.lottery` + time window 60–280s |
-| Mid 30–94¢ | `PRICE_BANDS.mid` when convergence not bursting |
-| FOK micro-clips | `orderType: "FOK"` via `ctx.postOrders()` |
-| Winner inference | CEX spot vs `openPrice` in [`winner-inference.ts`](engine/strategy/lib/winner-inference.ts) |
-| Fee gate | `netEdgePerShare() >= GABIGOL_MIN_EDGE` |
-| Per-market caps | [`inventory.ts`](engine/strategy/lib/inventory.ts) |
-| Auto-redeem (prod) | Engine lifecycle → `redeemPositions()` via gasless relayer |
-| Multi-asset | [`scripts/run-gabigol.ts`](scripts/run-gabigol.ts) spawns btc/eth/sol/xrp processes |
+| Spec | Implementation |
+|------|----------------|
+| Markets | Crypto up/down **5m / 15m** — BTC, ETH, SOL, XRP (`MARKET_ASSET`, `MARKET_WINDOW`) |
+| Direction | `inferLikelyWinner(spot, openPrice)` — CEX vs slot open |
+| Favorite + band | Ask on favorite ∈ **[0.50, 0.70]** (target presentation zone **52–57¢**) |
+| Size | ~**$15–$60** / ~**50–100 shares** (config clip / min shares) |
+| Order type | **FOK / taker** via `ctx.postOrders()` |
+| No sell | `ctx.blockSells()` |
+| No hedge | Only buys the inferred favorite — never the opposite token |
+| Exit | Hold → engine **`redeemPositions`** on resolution (prod + relayer) |
 
-**Tick loop (every 100ms default):**
+Intended tick loop:
 
 ```
-1. Read remaining_seconds, openPrice, CEX spot
-2. Infer likely winner (UP/DOWN) from spot vs price-to-beat
-3. Lottery scanner  → FOK buy loser if ask ∈ [3¢, 30¢]
-4. Convergence scan → burst FOK buy winner if ask ∈ [94¢, 99.5¢] and net edge OK
-5. Mid scanner      → FOK buy winner if ask ∈ [30¢, 94¢] and convergence idle
-6. At slot end      → hold releases; engine redeems winners
+1. openPrice + CEX spot → gap → candidate favorite
+2. Read favorite best ask
+3. If ask ∈ [0.50, 0.70] and conviction OK and under market cap:
+     TAKER BUY ~$15–$60 (~50–100 sh)
+4. Stop further opposite-side logic (none exists)
+5. Slot end → redeem winners
 ```
+
+> **Note:** Tune [`engine/strategy/gabigol.ts`](engine/strategy/gabigol.ts) and env bands to this spec if an older multi-leg (convergence / lottery) path is still present in code. This README is the source of truth for **intended** behavior.
 
 ---
 
@@ -323,155 +326,127 @@ Add images under [`docs/screenshots/`](docs/screenshots/). The README references
 ### Prerequisites
 
 - Node.js 18+ (or [Bun](https://bun.sh))
-- Polygon wallet funded with **pUSD** for production ([`docs/MIGRATE_V2.md`](docs/MIGRATE_V2.md))
+- Production: Polygon wallet with **pUSD** ([`docs/MIGRATE_V2.md`](docs/MIGRATE_V2.md))
 
 ### Install
 
 ```bash
-git clone <this-repo> gabigol
 cd gabigol
 npm install          # or: bun install
 cp .env.example .env
 ```
 
-### Simulation (recommended first)
+### Simulation
 
 ```bash
-# Single asset, 20 rounds (~100 minutes real time for 5m windows)
 npm run gabigol:sim
-
-# Or explicitly:
-npx tsx index.ts --strategy gabigol --slot-offset 1 --rounds 20 --always-log
+# npx tsx index.ts --strategy gabigol --slot-offset 1 --rounds 20 --always-log
 ```
 
-Raise `MAX_SESSION_LOSS` (e.g. `200`) if you want the full 20 rounds without early shutdown on drawdown.
+Raise `MAX_SESSION_LOSS` (e.g. `200`) for longer runs.
 
 ### Multi-asset fleet
 
 ```bash
 npx tsx scripts/run-gabigol.ts
+# optional: --window=15m   --prod
 ```
-
-Spawns parallel processes: `btc`, `eth`, `sol`, `xrp` — each `MARKET_WINDOW=5m`.
 
 ### Production
 
 ```bash
-# Edit .env: PRIVATE_KEY, POLY_FUNDER_ADDRESS, BUILDER_*, FORCE_PROD=true
+# .env: PRIVATE_KEY, POLY_FUNDER_ADDRESS, BUILDER_*, FORCE_PROD=true
 npm run gabigol:prod
-
-# Periodic batch redeem backup
-npx tsx scripts/redeem.ts
+npx tsx scripts/redeem.ts   # backup redeem
 ```
 
 ---
 
-## Configuration reference
+## Configuration
 
-### Engine (`.env`)
+### Engine
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TICKER` | `polymarket,binance` | Price feeds for winner inference |
-| `MARKET_ASSET` | `btc` | Per-process asset (`btc`/`eth`/`sol`/`xrp`) |
-| `MARKET_WINDOW` | `5m` | `5m` or `15m` |
-| `MAX_SESSION_LOSS` | `50` | Stop engine when cumulative losses exceed this |
-| `WALLET_BALANCE` | `5000` | Simulated balance (paper trading) |
-| `PRIVATE_KEY` | — | Required for `--prod` |
-| `POLY_FUNDER_ADDRESS` | — | Polymarket proxy/funder wallet |
-| `BUILDER_KEY/SECRET/PASSPHRASE` | — | Gasless relayer (redeem) |
+| Variable | Role |
+|----------|------|
+| `TICKER` | CEX + Polymarket feeds for gap / direction |
+| `MARKET_ASSET` | `btc` / `eth` / `sol` / `xrp` |
+| `MARKET_WINDOW` | `5m` or `15m` |
+| `MAX_SESSION_LOSS` | Kill switch on cumulative losses |
+| `PRIVATE_KEY` / `POLY_FUNDER_ADDRESS` / `BUILDER_*` | Prod + redeem |
 
-### Gabigol strategy
+### Strategy knobs (align with this README)
 
-| Variable | Default | Profitability role |
-|----------|---------|-------------------|
-| `GABIGOL_CLIP_NOTIONAL` | `2.0` | Convergence clip size — core payroll unit |
-| `GABIGOL_MIN_EDGE` | `0.005` | Skip convergence when fee-adjusted edge < 0.5% |
-| `GABIGOL_MARKET_CAP` | `200` | Max $ per slot — limits blow-up on wrong-side bursts |
-| `GABIGOL_LOTTERY_CAP` | `30` | Caps lottery bleed per slot |
-| `GABIGOL_LOTTERY_CLIP_NOTIONAL` | `1.5` | Lottery ticket size — controls tail variance |
-| `GABIGOL_CONVERGENCE_MAX_SECS` | `120` | Endgame window length |
-| `GABIGOL_BURST_PER_TICK` | `3` | FOK orders per 100ms tick in convergence |
-| `GABIGOL_MIN_GAP_USD` | `0` | Require \|spot − open\| before trading (0 = aggressive) |
+| Knob | Target for this strategy |
+|------|---------------------------|
+| Entry ask band | **[0.50, 0.70]** |
+| Favorite zone | **~0.52–0.57** (confirmation, not a hard exclusive) |
+| Clip notional | **~$15–$60** |
+| Shares | **~50–100** |
+| Min CEX gap | Tunable (`GABIGOL_MIN_GAP_USD`) — skip flat opens |
+| Opposite side | **Disabled** |
+| Sells | **Disabled** |
 
-Full list: [`.env.example`](.env.example) and [`docs/GABIGOL.md`](docs/GABIGOL.md).
+See [`.env.example`](.env.example) and [`docs/GABIGOL.md`](docs/GABIGOL.md) for full env lists; update defaults when code matches this band/sizing.
 
 ---
 
 ## Simulation and validation
 
-After a sim session, verify profitability mechanics are firing correctly:
-
 ```bash
-# Visual timeline of one slot
 npx tsx scripts/chart.ts logs/early-bird-btc-updown-5m-*.log --open
 ```
 
 **Checklist**
 
-- [ ] `gabigol convergence` fills at 94–99¢ in final ~120s
-- [ ] `gabigol lottery` fills at 3–30¢ mid-slot
-- [ ] `gabigol mid` fills at 30–94¢
-- [ ] **Zero** `SELL` lines in console or logs
-- [ ] `Redemption successful` on resolved winners (prod/sim)
-- [ ] Per-slot spend ≤ `GABIGOL_MARKET_CAP`
-
-**Example sim outcome (BTC, 5 rounds before loss limit):**
-
-- Session PnL reached **+$209** on **$5,000** sim wallet
-- All three scanners logged hundreds of FOK fills
-- Shutdown triggered by `MAX_SESSION_LOSS=$50` (tune upward for longer runs)
+- [ ] Direction matches CEX gap sign
+- [ ] Entries only on **one** side (favorite)
+- [ ] Ask prices in **50–70¢** (often clustered mid **52–57¢**)
+- [ ] Notionals roughly **$15–$60** / **~50–100** shares
+- [ ] **Zero** `SELL` lines
+- [ ] **Zero** opposite-side buys in the same slot
+- [ ] Winners redeem; losers go to zero
 
 ---
 
-## Production deployment
+## Production
 
-1. **Fund pUSD** on your Polymarket proxy wallet.
-2. **Simulate** ≥10 rounds; confirm burst/lottery patterns in charts.
-3. **Set risk:** `MAX_SESSION_LOSS`, `GABIGOL_MARKET_CAP` for your bankroll.
-4. **Run fleet:** `npm run gabigol:prod` (4 assets × 5m).
-5. **Redeem:** engine auto-redeems; also run `npx tsx scripts/redeem.ts` after sessions.
-6. **Monitor:** wallet balance, fill rate, convergence rejection rate, session PnL.
+1. Fund **pUSD** on the proxy wallet.
+2. Sim ≥10 rounds; confirm mid-band single-side entries.
+3. Set `MAX_SESSION_LOSS` and per-slot cap for bankroll.
+4. Run fleet: `npm run gabigol:prod`.
+5. Monitor **hit rate at filled price**, average entry, and session PnL.
+6. Run `scripts/redeem.ts` periodically as backup.
 
-**Capital guidance (from observed gabigol scale)**
-
-| Parameter | Gabigol-like | Small independent start |
-|-----------|--------------|---------------------------|
-| Wallet buffer | $100K+ pUSD | $5K–$10K |
-| Per-clip notional | $1.50–$2.00 | $1.00–$2.00 |
-| Per-market cap | $50–$300 | $20–$50 |
-| Concurrent markets | Many (4 assets × continuous slots) | 1–4 processes |
+| Parameter | Suggested start |
+|-----------|-----------------|
+| Per-slot notional | $15–$60 |
+| Concurrent assets | 1 → then 4 (btc/eth/sol/xrp) |
+| Wallet float | Enough for several concurrent open slots |
 
 ---
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  scripts/run-gabigol.ts                                      │
-│    ├── process: MARKET_ASSET=btc  → EarlyBird + gabigol      │
-│    ├── process: MARKET_ASSET=eth  → EarlyBird + gabigol      │
-│    ├── process: MARKET_ASSET=sol  → EarlyBird + gabigol      │
-│    └── process: MARKET_ASSET=xrp  → EarlyBird + gabigol      │
-└──────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌──────────────────────────────────────────────────────────────┐
-│  EarlyBird engine (per process)                              │
-│    MarketLifecycle per slot → gabigol strategy tick loop     │
-│    CLOB WS order book + CEX ticker + FOK placement           │
-│    Resolution → redeemPositions (gasless relayer)            │
-└──────────────────────────────────────────────────────────────┘
+scripts/run-gabigol.ts
+  ├── MARKET_ASSET=btc  → EarlyBird + gabigol
+  ├── MARKET_ASSET=eth  → EarlyBird + gabigol
+  ├── MARKET_ASSET=sol  → EarlyBird + gabigol
+  └── MARKET_ASSET=xrp  → EarlyBird + gabigol
+            │
+            ▼
+  MarketLifecycle → direction + favorite band → FOK buy
+                 → hold to resolve → redeemPositions
 ```
 
 **Key files**
 
 ```
-engine/strategy/gabigol.ts              # Three scanners, blockSells, hold-to-redeem
-engine/strategy/lib/fees.ts             # Taker fee + net edge
-engine/strategy/lib/inventory.ts        # Per-slot spend caps
-engine/strategy/lib/winner-inference.ts # UP/DOWN from spot vs open
-scripts/run-gabigol.ts                  # Multi-asset launcher
+engine/strategy/gabigol.ts               # Strategy entrypoint
+engine/strategy/lib/winner-inference.ts  # CEX spot vs open → UP/DOWN
+engine/strategy/lib/fees.ts              # Taker fee / net edge helpers
+engine/strategy/lib/inventory.ts         # Per-slot spend caps
+scripts/run-gabigol.ts                   # Multi-asset launcher
 ```
 
 ---
@@ -480,14 +455,14 @@ scripts/run-gabigol.ts                  # Multi-asset launcher
 
 | Doc | Contents |
 |-----|----------|
-| [`docs/GABIGOL.md`](docs/GABIGOL.md) | Strategy params, risks, prod checklist |
-| [`docs/GUIDE.md`](docs/GUIDE.md) | Engine API, strategy development |
+| [`docs/GABIGOL.md`](docs/GABIGOL.md) | Params, risks, prod checklist |
+| [`docs/GUIDE.md`](docs/GUIDE.md) | Engine API and strategy development |
 | [`docs/LEARNING.md`](docs/LEARNING.md) | Prediction markets primer |
-| [`docs/MIGRATE_V2.md`](docs/MIGRATE_V2.md) | USDC.e → pUSD migration |
-| [`docs/screenshots/`](docs/screenshots/) | Drop visual assets here |
+| [`docs/MIGRATE_V2.md`](docs/MIGRATE_V2.md) | USDC.e → pUSD |
+| [`docs/screenshots/`](docs/screenshots/) | Drop visuals here |
 
 ---
 
 ## License
 
-MIT — engine from [KaustubhPatange/polymarket-trade-engine](https://github.com/KaustubhPatange/polymarket-trade-engine). Gabigol strategy implementation and documentation in this fork.
+MIT — engine from [KaustubhPatange/polymarket-trade-engine](https://github.com/KaustubhPatange/polymarket-trade-engine). Strategy docs in this fork describe the **favorite mid-band, hold-to-redeem** approach above.

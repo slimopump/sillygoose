@@ -1,15 +1,12 @@
 # Screenshots
 
-Drop visual assets here and reference them from the root [README.md](../../README.md).
-
-Suggested filenames:
+Drop visual assets here; the root [README.md](../../README.md) references these filenames.
 
 | File | What to capture |
 |------|-----------------|
-| `01-polymarket-updown-market.png` | A live BTC/ETH 5m Up/Down market page — UP/DOWN prices, countdown, price to beat |
-| `02-orderbook-convergence.png` | Order book in the last ~2 minutes — winner side ask at 94–99¢ |
-| `03-orderbook-lottery.png` | Same slot earlier — loser side ask at 3–30¢ |
-| `04-gabigol-profile-struct.png` | Struct / Polymarket profile — cumulative PnL, volume, win rate |
+| `01-polymarket-updown-market.png` | Live BTC/ETH/SOL/XRP 5m or 15m Up/Down page — countdown, price to beat, UP/DOWN |
+| `02-orderbook-favorite-midband.png` | Favorite side ask ~52–57¢ still inside the 50–70¢ entry band |
+| `03-cex-gap-and-asks.png` | Spot vs open (gap) alongside UP/DOWN asks |
+| `04-gabigol-profile-struct.png` | PnL / volume / win-rate dashboard |
 | `05-simulation-chart.png` | Output of `npx tsx scripts/chart.ts logs/early-bird-*.log --open` |
-| `06-console-burst.png` | Terminal showing convergence burst + lottery fills, no sells |
-| `07-both-sides-same-slot.png` | Open positions showing UP convergence + DOWN lottery in one 5m window |
+| `06-console-favorite-buy.png` | Terminal: single-side FOK buy — no sells, no opposite-side buys |
