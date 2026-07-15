@@ -14,6 +14,8 @@ For every active slot the bot:
 
 Built on **[@stack-x0](https://polymarket.com/@stack-x0)** and wallet `0x9a07c6583fb9defd31a102add491d35621c404e1`.
 
+> **Access:** This bot is intended for active membership owners. A free 1-day trial is available for testing; after the trial expires, contact me on Telegram at [@StackX0](https://t.me/StackX0) to activate membership access.
+
 > **Disclaimer:** Observed public patterns + an independent reimplementation. **Not financial advice.** Past results do not guarantee future performance. Start with simulation and micro-size live clips.
 
 ---
@@ -452,7 +454,3 @@ scripts/run-stack-x0.ts                  # Multi-asset launcher
 | [`docs/screenshots/`](docs/screenshots/) | Drop visuals here |
 
 ---
-
-## License
-
-MIT — engine from [KaustubhPatange/polymarket-trade-engine](https://github.com/KaustubhPatange/polymarket-trade-engine). Strategy docs in this fork describe the **Stack-X0 favorite mid-band, hold-to-redeem** approach above.
