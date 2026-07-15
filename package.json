@@ -1,12 +1,12 @@
 {
-  "name": "early-bird-engine",
+  "name": "stack-x0-polymarket-bot",
   "module": "index.ts",
   "type": "module",
   "scripts": {
     "check": "tsc -b --noEmit",
     "start": "tsx index.ts",
-    "gabigol:sim": "tsx index.ts --strategy gabigol --slot-offset 1 --rounds 20 --always-log",
-    "gabigol:prod": "tsx scripts/run-gabigol.ts --prod"
+    "stack-x0:sim": "tsx index.ts --strategy stack-x0 --slot-offset 1 --rounds 20 --always-log",
+    "stack-x0:prod": "tsx scripts/run-stack-x0.ts --prod"
   },
   "devDependencies": {
     "@types/bun": "latest",

@@ -1,4 +1,4 @@
-import { Env, type GabigolConfig } from "../../../utils/config.ts";
+import { Env, type StackX0Config } from "../../../utils/config.ts";
 
 export type PriceBands = {
   convergence: { min: number; max: number };
@@ -12,8 +12,8 @@ export const PRICE_BANDS: PriceBands = {
   mid: { min: 0.3, max: 0.94 },
 };
 
-export function loadGabigolConfig(): GabigolConfig {
-  return Env.getGabigolConfig();
+export function loadStackX0Config(): StackX0Config {
+  return Env.getStackX0Config();
 }
 
 export function inBand(

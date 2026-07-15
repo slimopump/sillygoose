@@ -1,10 +1,10 @@
 /**
- * Spawns one EarlyBird process per crypto asset for gabigol-style multi-market farming.
+ * Spawns one EarlyBird process per crypto asset for the Stack-X0 strategy.
  *
  * Usage:
- *   npx tsx scripts/run-gabigol.ts
- *   npx tsx scripts/run-gabigol.ts --prod
- *   npx tsx scripts/run-gabigol.ts --window 15m
+ *   npx tsx scripts/run-stack-x0.ts
+ *   npx tsx scripts/run-stack-x0.ts --prod
+ *   npx tsx scripts/run-stack-x0.ts --window=15m
  */
 
 import { spawn } from "node:child_process";
@@ -22,7 +22,14 @@ const slotOffset =
   args.find((a) => a.startsWith("--slot-offset="))?.split("=")[1] ?? "1";
 
 const runner = process.platform === "win32" ? "npx.cmd" : "npx";
-const runnerArgs = ["tsx", "index.ts", "--strategy", "gabigol", "--slot-offset", slotOffset];
+const runnerArgs = [
+  "tsx",
+  "index.ts",
+  "--strategy",
+  "stack-x0",
+  "--slot-offset",
+  slotOffset,
+];
 
 if (prod) {
   runnerArgs.push("--prod");
@@ -44,11 +51,13 @@ for (const asset of ASSETS) {
   });
 
   child.on("exit", (code) => {
-    console.log(`[run-gabigol] ${asset} exited with code ${code ?? "?"}`);
+    console.log(`[run-stack-x0] ${asset} exited with code ${code ?? "?"}`);
   });
 
   children.push(child);
-  console.log(`[run-gabigol] started ${asset}-updown-${window} (pid ${child.pid})`);
+  console.log(
+    `[run-stack-x0] started ${asset}-updown-${window} (pid ${child.pid})`,
+  );
 }
 
 function shutdown() {

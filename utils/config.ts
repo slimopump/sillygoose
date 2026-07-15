@@ -1,7 +1,7 @@
 export type MarketWindow = "5m" | "15m";
 export type MarketAsset = "btc" | "eth" | "xrp" | "sol" | "doge" | "hype" | "bnb";
 
-export type GabigolConfig = {
+export type StackX0Config = {
   CLIP_NOTIONAL: number;
   MIN_SHARES: number;
   MARKET_CAP: number;
@@ -150,22 +150,22 @@ export class Env {
     return config;
   }
 
-  static getGabigolConfig(): GabigolConfig {
+  static getStackX0Config(): StackX0Config {
     return {
-      CLIP_NOTIONAL: Env.getNumber("GABIGOL_CLIP_NOTIONAL", 2.0),
-      MIN_SHARES: Env.getInt("GABIGOL_MIN_SHARES", 5),
-      MARKET_CAP: Env.getNumber("GABIGOL_MARKET_CAP", 200),
-      LOTTERY_CAP: Env.getNumber("GABIGOL_LOTTERY_CAP", 30),
-      MID_CAP: Env.getNumber("GABIGOL_MID_CAP", 50),
-      LOTTERY_CLIP_NOTIONAL: Env.getNumber("GABIGOL_LOTTERY_CLIP_NOTIONAL", 1.5),
-      MID_CLIP_NOTIONAL: Env.getNumber("GABIGOL_MID_CLIP_NOTIONAL", 1.5),
-      MIN_EDGE: Env.getNumber("GABIGOL_MIN_EDGE", 0.005),
-      CONVERGENCE_MAX_SECS: Env.getInt("GABIGOL_CONVERGENCE_MAX_SECS", 120),
-      LOTTERY_MIN_SECS: Env.getInt("GABIGOL_LOTTERY_MIN_SECS", 60),
-      LOTTERY_MAX_SECS: Env.getInt("GABIGOL_LOTTERY_MAX_SECS", 280),
-      BURST_PER_TICK: Env.getInt("GABIGOL_BURST_PER_TICK", 3),
-      MIN_GAP_USD: Env.getNumber("GABIGOL_MIN_GAP_USD", 0),
-      TICK_MS: Env.getInt("GABIGOL_TICK_MS", 100),
+      CLIP_NOTIONAL: Env.getNumber("STACK_X0_CLIP_NOTIONAL", 2.0),
+      MIN_SHARES: Env.getInt("STACK_X0_MIN_SHARES", 5),
+      MARKET_CAP: Env.getNumber("STACK_X0_MARKET_CAP", 200),
+      LOTTERY_CAP: Env.getNumber("STACK_X0_LOTTERY_CAP", 30),
+      MID_CAP: Env.getNumber("STACK_X0_MID_CAP", 50),
+      LOTTERY_CLIP_NOTIONAL: Env.getNumber("STACK_X0_LOTTERY_CLIP_NOTIONAL", 1.5),
+      MID_CLIP_NOTIONAL: Env.getNumber("STACK_X0_MID_CLIP_NOTIONAL", 1.5),
+      MIN_EDGE: Env.getNumber("STACK_X0_MIN_EDGE", 0.005),
+      CONVERGENCE_MAX_SECS: Env.getInt("STACK_X0_CONVERGENCE_MAX_SECS", 120),
+      LOTTERY_MIN_SECS: Env.getInt("STACK_X0_LOTTERY_MIN_SECS", 60),
+      LOTTERY_MAX_SECS: Env.getInt("STACK_X0_LOTTERY_MAX_SECS", 280),
+      BURST_PER_TICK: Env.getInt("STACK_X0_BURST_PER_TICK", 3),
+      MIN_GAP_USD: Env.getNumber("STACK_X0_MIN_GAP_USD", 0),
+      TICK_MS: Env.getInt("STACK_X0_TICK_MS", 100),
     };
   }
 

@@ -1,6 +1,6 @@
 import type { Strategy, StrategyContext } from "./types.ts";
 import { clipShares, netEdgePerShare } from "./lib/fees.ts";
-import { inBand, loadGabigolConfig, PRICE_BANDS } from "./lib/gabigol-config.ts";
+import { inBand, loadStackX0Config, PRICE_BANDS } from "./lib/stack-x0-config.ts";
 import { MarketInventory, type Leg } from "./lib/inventory.ts";
 import { inferLikelyWinner, type Side } from "./lib/winner-inference.ts";
 
@@ -41,7 +41,7 @@ function placeFokBuy(
         inFlight.notional = Math.max(0, inFlight.notional - notional);
         inventory.record(leg, filledNotional);
         ctx.log(
-          `[${ctx.slug}] gabigol ${label}: BUY ${side} FOK @ ${price.toFixed(3)} (${filledShares} sh, $${filledNotional.toFixed(2)})`,
+          `[${ctx.slug}] stack-x0 ${label}: BUY ${side} FOK @ ${price.toFixed(3)} (${filledShares} sh, $${filledNotional.toFixed(2)})`,
           "green",
         );
       },
@@ -53,8 +53,8 @@ function placeFokBuy(
   return true;
 }
 
-export const gabigol: Strategy = async (ctx) => {
-  const cfg = loadGabigolConfig();
+export const stackX0: Strategy = async (ctx) => {
+  const cfg = loadStackX0Config();
   const inventory = new MarketInventory(
     cfg.MARKET_CAP,
     cfg.LOTTERY_CAP,
@@ -87,7 +87,6 @@ export const gabigol: Strategy = async (ctx) => {
     const winnerAsk = ctx.orderBook.bestAskInfo(winner);
     const loserAsk = ctx.orderBook.bestAskInfo(loser);
 
-    // --- Scanner B: Lottery (cheaper / likely-losing side) ---
     if (
       remaining >= cfg.LOTTERY_MIN_SECS &&
       remaining <= cfg.LOTTERY_MAX_SECS &&
@@ -112,7 +111,6 @@ export const gabigol: Strategy = async (ctx) => {
       );
     }
 
-    // --- Scanner A: Convergence (likely winner, endgame) ---
     const inConvergenceWindow = remaining <= cfg.CONVERGENCE_MAX_SECS;
     let convergenceActive = false;
 
@@ -151,7 +149,6 @@ export const gabigol: Strategy = async (ctx) => {
       }
     }
 
-    // --- Scanner C: Mid conviction (directional, lower priority) ---
     if (
       !convergenceActive &&
       winnerAsk &&

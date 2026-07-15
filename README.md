@@ -12,7 +12,7 @@ For every active slot the bot:
 4. **Holds to resolution** → redeem **$1** if correct, **$0** if wrong
 5. **Never sells**, **never buys the opposite side**
 
-Built on [polymarket-trade-engine](https://github.com/KaustubhPatange/polymarket-trade-engine). Inspired by reverse-engineered behavior of [@gabigol](https://polymarket.com/@gabigol) (`0x885278f0e304bc2d53f805af2ab779cb6011c569`).
+Built on **[@stack-x0](https://polymarket.com/@stack-x0)** and wallet `0x9a07c6583fb9defd31a102add491d35621c404e1`.
 
 > **Disclaimer:** Observed public patterns + an independent reimplementation. **Not financial advice.** Past results do not guarantee future performance. Start with simulation and micro-size live clips.
 
@@ -71,12 +71,11 @@ flowchart TB
 | Entry | Best ask ∈ **[0.50, 0.70]** + conviction OK | Size **~$15–$60** (~**50–100** shares) as **FOK/taker** |
 | Exit | Slot resolves | Redeem winners at **$1**; losers expire worthless |
 
-**Screenshot placeholder — market context**
+**Stack-X0 profile context**
 
-<!-- Add: docs/screenshots/01-polymarket-updown-market.png -->
-![Polymarket 5m Up/Down market](docs/screenshots/01-polymarket-updown-market.png)
+![Stack-X0 profile and recent activity](docs/screenshots/Profile_ss.png)
 
-*Live crypto Up/Down slot: countdown, price to beat, UP/DOWN prices. One independent binary per window.*
+*The `@stack-x0` profile shows a live wallet around `$6.9k` portfolio / `$6.8k` cash and a recent activity stream dominated by mid-band crypto Up/Down buys. The visible rows include entries such as ETH Down `46.0¢` / `53.6¢` and BTC Down `49.0¢`, matching the “favorite/mid-band, hold-to-redeem” style this README documents.*
 
 ---
 
@@ -119,12 +118,11 @@ flowchart LR
 
 If, after fees, your long-run win rate on these mid-band favorites exceeds the break-even rate for your average entry price, the strategy has positive expectancy. Volume (many BTC/ETH/SOL/XRP slots) then compounds that edge.
 
-**Screenshot placeholder — favorite mid-band book**
+**Winning-history evidence**
 
-<!-- Add: docs/screenshots/02-orderbook-favorite-midband.png -->
-![Favorite mid-band order book](docs/screenshots/02-orderbook-favorite-midband.png)
+![Stack-X0 winning redemptions](docs/screenshots/winning.png)
 
-*Favorite side trading ~52–57¢, ask still inside 50–70¢ — this is the intended entry zone.*
+*The history screenshot shows the exact mechanics: mid-band buys around `48–55¢` and later green `Redeem` rows. Examples visible in the screenshot include XRP and ETH redemptions around `+$78.79`, `+$96.25`, `+$87.29`, `+$28.42`, and `+$127.86`. This is the core cash-flow path: buy one side, wait, redeem if correct.*
 
 ---
 
@@ -181,12 +179,11 @@ This strategy sizes **enough to make mid-band edge matter**, but **small enough 
 
 ~**50–100 shares** at mid-band prices lands in this notional range by design.
 
-**Screenshot placeholder — PnL / profile**
+**Profile / analytics**
 
-<!-- Add: docs/screenshots/04-gabigol-profile-struct.png -->
-![Profile / analytics](docs/screenshots/04-gabigol-profile-struct.png)
+![Stack-X0 portfolio snapshot](docs/screenshots/Profile_ss.png)
 
-*Track cumulative PnL, volume, and win rate — mid-band hit rate is the KPI that matters most.*
+*Use the profile view to track wallet health: portfolio, cash available, one-day PnL, and the most recent unresolved buys. For this strategy, the most important KPI is not trade count — it is hit rate by average filled price.*
 
 ---
 
@@ -200,7 +197,7 @@ gap > 0  → candidate UP
 gap < 0  → candidate DOWN
 ```
 
-Optional filter: require `|gap| ≥ GABIGOL_MIN_GAP_USD` so flat open ≈ coin-flip slots are skipped.
+Optional filter: require `|gap| ≥ STACK_X0_MIN_GAP_USD` so flat open ≈ coin-flip slots are skipped.
 
 ### Favorite identification (52–57¢)
 
@@ -225,12 +222,11 @@ The **favorite** is the side the book already leans toward — typically mid ~**
 - **No averaging into the opposite side.**
 - **No hedge.** If you are wrong, you eat the premium — that is the cost of the edge model.
 
-**Screenshot placeholder — CEX vs open**
+**Recent buy pattern from Stack-X0**
 
-<!-- Add: docs/screenshots/03-cex-gap-and-asks.png -->
-![CEX gap and asks](docs/screenshots/03-cex-gap-and-asks.png)
+![Stack-X0 mid-band buy pattern](docs/screenshots/winning.png)
 
-*Spot vs price-to-beat with UP/DOWN asks — direction + favorite band visible in one frame.*
+*Visible buys include BTC Down `50.0¢`, XRP Down `50.9¢`, ETH Down `50.8¢`, SOL Up `55.5¢`, and XRP Down `48.1¢`. These are not 99¢ convergence clips or 10¢ lottery tickets — they are mid-band directional entries.*
 
 ---
 
@@ -268,28 +264,22 @@ The **favorite** is the side the book already leans toward — typically mid ~**
 
 ## Visual walkthrough (screenshots)
 
-Drop files under [`docs/screenshots/`](docs/screenshots/). Suggested set for **this** strategy:
+The README uses the two screenshots currently available under [`docs/screenshots/`](docs/screenshots/):
 
 | # | File | Capture |
 |---|------|---------|
-| 1 | [`01-polymarket-updown-market.png`](docs/screenshots/01-polymarket-updown-market.png) | Slot UI — countdown, price to beat, UP/DOWN |
-| 2 | [`02-orderbook-favorite-midband.png`](docs/screenshots/02-orderbook-favorite-midband.png) | Favorite ask ~52–57¢ inside 50–70¢ |
-| 3 | [`03-cex-gap-and-asks.png`](docs/screenshots/03-cex-gap-and-asks.png) | Spot vs open + asks |
-| 4 | [`04-gabigol-profile-struct.png`](docs/screenshots/04-gabigol-profile-struct.png) | PnL / win-rate dashboard |
-| 5 | [`05-simulation-chart.png`](docs/screenshots/05-simulation-chart.png) | `scripts/chart.ts` for one round |
-| 6 | [`06-console-favorite-buy.png`](docs/screenshots/06-console-favorite-buy.png) | Single-side FOK buy, **no sells**, **no opposite** |
+| 1 | [`Profile_ss.png`](docs/screenshots/Profile_ss.png) | `@stack-x0` profile, portfolio/cash, PnL, recent buys |
+| 2 | [`winning.png`](docs/screenshots/winning.png) | Buy → redeem history with mid-band entries and green winning redemptions |
 
-**Screenshot placeholder — chart**
+**Profile screenshot**
 
-<!-- Add: docs/screenshots/05-simulation-chart.png -->
-![Simulation chart](docs/screenshots/05-simulation-chart.png)
+![Stack-X0 profile](docs/screenshots/Profile_ss.png)
 
-**Screenshot placeholder — console**
+**Winning-history screenshot**
 
-<!-- Add: docs/screenshots/06-console-favorite-buy.png -->
-![Console favorite buy](docs/screenshots/06-console-favorite-buy.png)
+![Stack-X0 winning history](docs/screenshots/winning.png)
 
-*One favorite-side taker buy per slot — no SELL, no opposite BUY.*
+*Together these two screenshots show the profile-level bankroll context and the trade-level cash-flow pattern: mid-band buys followed by redeem rows when the selected side resolves correctly.*
 
 ---
 
@@ -317,7 +307,7 @@ Intended tick loop:
 5. Slot end → redeem winners
 ```
 
-> **Note:** Tune [`engine/strategy/gabigol.ts`](engine/strategy/gabigol.ts) and env bands to this spec if an older multi-leg (convergence / lottery) path is still present in code. This README is the source of truth for **intended** behavior.
+> **Note:** The user-facing strategy name is `stack-x0`, and this README is centered on the Stack-X0 wallet `0x9a07c6583fb9defd31a102add491d35621c404e1`.
 
 ---
 
@@ -331,7 +321,7 @@ Intended tick loop:
 ### Install
 
 ```bash
-cd gabigol
+cd stack-x0
 npm install          # or: bun install
 cp .env.example .env
 ```
@@ -339,8 +329,8 @@ cp .env.example .env
 ### Simulation
 
 ```bash
-npm run gabigol:sim
-# npx tsx index.ts --strategy gabigol --slot-offset 1 --rounds 20 --always-log
+npm run stack-x0:sim
+# npx tsx index.ts --strategy stack-x0 --slot-offset 1 --rounds 20 --always-log
 ```
 
 Raise `MAX_SESSION_LOSS` (e.g. `200`) for longer runs.
@@ -348,7 +338,7 @@ Raise `MAX_SESSION_LOSS` (e.g. `200`) for longer runs.
 ### Multi-asset fleet
 
 ```bash
-npx tsx scripts/run-gabigol.ts
+npx tsx scripts/run-stack-x0.ts
 # optional: --window=15m   --prod
 ```
 
@@ -356,7 +346,7 @@ npx tsx scripts/run-gabigol.ts
 
 ```bash
 # .env: PRIVATE_KEY, POLY_FUNDER_ADDRESS, BUILDER_*, FORCE_PROD=true
-npm run gabigol:prod
+npm run stack-x0:prod
 npx tsx scripts/redeem.ts   # backup redeem
 ```
 
@@ -382,11 +372,11 @@ npx tsx scripts/redeem.ts   # backup redeem
 | Favorite zone | **~0.52–0.57** (confirmation, not a hard exclusive) |
 | Clip notional | **~$15–$60** |
 | Shares | **~50–100** |
-| Min CEX gap | Tunable (`GABIGOL_MIN_GAP_USD`) — skip flat opens |
+| Min CEX gap | Tunable (`STACK_X0_MIN_GAP_USD`) — skip flat opens |
 | Opposite side | **Disabled** |
 | Sells | **Disabled** |
 
-See [`.env.example`](.env.example) and [`docs/GABIGOL.md`](docs/GABIGOL.md) for full env lists; update defaults when code matches this band/sizing.
+See [`.env.example`](.env.example) and [`docs/STACK-X0.md`](docs/STACK-X0.md) for the current Stack-X0 env list.
 
 ---
 
@@ -413,7 +403,7 @@ npx tsx scripts/chart.ts logs/early-bird-btc-updown-5m-*.log --open
 1. Fund **pUSD** on the proxy wallet.
 2. Sim ≥10 rounds; confirm mid-band single-side entries.
 3. Set `MAX_SESSION_LOSS` and per-slot cap for bankroll.
-4. Run fleet: `npm run gabigol:prod`.
+4. Run fleet: `npm run stack-x0:prod`.
 5. Monitor **hit rate at filled price**, average entry, and session PnL.
 6. Run `scripts/redeem.ts` periodically as backup.
 
@@ -428,11 +418,11 @@ npx tsx scripts/chart.ts logs/early-bird-btc-updown-5m-*.log --open
 ## Architecture
 
 ```
-scripts/run-gabigol.ts
-  ├── MARKET_ASSET=btc  → EarlyBird + gabigol
-  ├── MARKET_ASSET=eth  → EarlyBird + gabigol
-  ├── MARKET_ASSET=sol  → EarlyBird + gabigol
-  └── MARKET_ASSET=xrp  → EarlyBird + gabigol
+scripts/run-stack-x0.ts
+  ├── MARKET_ASSET=btc  → EarlyBird + stack-x0
+  ├── MARKET_ASSET=eth  → EarlyBird + stack-x0
+  ├── MARKET_ASSET=sol  → EarlyBird + stack-x0
+  └── MARKET_ASSET=xrp  → EarlyBird + stack-x0
             │
             ▼
   MarketLifecycle → direction + favorite band → FOK buy
@@ -442,11 +432,11 @@ scripts/run-gabigol.ts
 **Key files**
 
 ```
-engine/strategy/gabigol.ts               # Strategy entrypoint
+engine/strategy/stack-x0.ts              # Strategy entrypoint alias
 engine/strategy/lib/winner-inference.ts  # CEX spot vs open → UP/DOWN
 engine/strategy/lib/fees.ts              # Taker fee / net edge helpers
 engine/strategy/lib/inventory.ts         # Per-slot spend caps
-scripts/run-gabigol.ts                   # Multi-asset launcher
+scripts/run-stack-x0.ts                  # Multi-asset launcher
 ```
 
 ---
@@ -455,7 +445,7 @@ scripts/run-gabigol.ts                   # Multi-asset launcher
 
 | Doc | Contents |
 |-----|----------|
-| [`docs/GABIGOL.md`](docs/GABIGOL.md) | Params, risks, prod checklist |
+| [`docs/STACK-X0.md`](docs/STACK-X0.md) | Params, risks, prod checklist |
 | [`docs/GUIDE.md`](docs/GUIDE.md) | Engine API and strategy development |
 | [`docs/LEARNING.md`](docs/LEARNING.md) | Prediction markets primer |
 | [`docs/MIGRATE_V2.md`](docs/MIGRATE_V2.md) | USDC.e → pUSD |
@@ -465,4 +455,4 @@ scripts/run-gabigol.ts                   # Multi-asset launcher
 
 ## License
 
-MIT — engine from [KaustubhPatange/polymarket-trade-engine](https://github.com/KaustubhPatange/polymarket-trade-engine). Strategy docs in this fork describe the **favorite mid-band, hold-to-redeem** approach above.
+MIT — engine from [KaustubhPatange/polymarket-trade-engine](https://github.com/KaustubhPatange/polymarket-trade-engine). Strategy docs in this fork describe the **Stack-X0 favorite mid-band, hold-to-redeem** approach above.

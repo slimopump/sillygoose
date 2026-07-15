@@ -1,12 +1,12 @@
 import type { Strategy } from "./types.ts";
 import { simulationStrategy } from "./simulation.ts";
 import { lateEntry } from "./late-entry.ts";
-import { gabigol } from "./gabigol.ts";
+import { stackX0 } from "./stack-x0.ts";
 
 export const strategies: Record<string, Strategy> = {
   "simulation": simulationStrategy,
   "late-entry": lateEntry,
-  "gabigol": gabigol,
+  "stack-x0": stackX0,
 };
 
 export const DEFAULT_STRATEGY = "simulation";
