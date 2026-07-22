@@ -1,10 +1,10 @@
 # STACK-X0 — Polymarket Crypto Up/Down Bot
 
-**Account verification.** This recording confirms that the Polymarket profile [@stack-x0](https://polymarket.com/@stack-x0) (`0x9a07c6583fb9defd31a102add491d35621c404e1`) is operated by the author of this repository:
+**Status update.** Current market conditions are unfavorable for this bot. An updated strategy is in progress — see the recording below for context from [@stack-x0](https://polymarket.com/@stack-x0) (`0x9a07c6583fb9defd31a102add491d35621c404e1`):
 
-![Stack-X0 ownership proof](docs/screenshots/proof.gif)
+![Stack-X0 strategy update](docs/screenshots/stack-x0.gif)
 
-[Watch full ownership proof (MP4)](docs/screenshots/proof.mp4)
+[Watch full update (MP4)](docs/screenshots/stack-x0.mp4)
 
 Automated trading engine for Polymarket **crypto Up/Down** markets (BTC, ETH, SOL, XRP — **5m** and **15m** windows). Strategy core:
 
